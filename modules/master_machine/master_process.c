@@ -39,6 +39,13 @@ void VisionSetAltitude(float yaw, float pitch, float roll)
  *
  * @param id vision_usart_instance的地址,此处没用.
  */
+
+#ifdef VISION_USE_UART
+
+#include "bsp_usart.h"
+
+static USARTInstance *vision_usart_instance;
+
 static void VisionOfflineCallback(void *id)
 {
 #ifdef VISION_USE_UART
@@ -47,11 +54,6 @@ static void VisionOfflineCallback(void *id)
     LOGWARNING("[vision] vision offline, restart communication.");
 }
 
-#ifdef VISION_USE_UART
-
-#include "bsp_usart.h"
-
-static USARTInstance *vision_usart_instance;
 
 /**
  * @brief 接收解包回调函数,将在bsp_usart.c中被usart rx callback调用
@@ -111,6 +113,14 @@ void VisionSend()
 #endif // VISION_USE_UART
 
 #ifdef VISION_USE_VCP
+
+static void VisionOfflineCallback(void *id)
+{
+#ifdef VISION_USE_UART
+    USARTServiceInit(vision_usart_instance);
+#endif // !VISION_USE_UART
+    LOGWARNING("[vision] vision offline, restart communication.");
+}
 
 #include "bsp_usb.h"
 static uint8_t *vis_recv_buff;

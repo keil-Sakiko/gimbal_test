@@ -60,14 +60,14 @@ void GimbalInit()
     Motor_Init_Config_s pitch_config = {
         .can_init_config = {
             .can_handle = &hcan1,
-            .tx_id =0x101,
-            .rx_id =0x001,
+            .tx_id =0x106,
+            .rx_id =0x06,
         },
         .controller_param_init_config = {
             .angle_PID = {
                 .Kp = 2,  // 2
                 .Ki = 0,   // 0
-                .Kd = 0.06,    // 0.1
+                .Kd = 0,    // 0.1
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
                 .IntegralLimit = 5, //5
                 .MaxOut = 30,  // 30
@@ -75,7 +75,7 @@ void GimbalInit()
             .speed_PID = {
                 .Kp = 2.5,  // 2.5
                 .Ki = 0,  // 0
-                .Kd = 0.5,   // 0.5
+                .Kd = 0,   // 0.5
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
                 .IntegralLimit = 2,
                 .MaxOut = 4,
