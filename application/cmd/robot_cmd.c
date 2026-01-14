@@ -9,6 +9,7 @@
 #include "general_def.h"
 #include "dji_motor.h"
 #include "mc6c.h"
+#include "user_lib.h"
 // bsp
 #include "bsp_dwt.h"
 #include "bsp_log.h"
@@ -73,7 +74,7 @@ void RobotCMDInit()
     cmd_can_comm = CANCommInit(&comm_conf);
 #endif // GIMBAL_BOARD
     gimbal_cmd_send.pitch = 0;
-
+    gimbal_cmd_send.yaw = 0;
     robot_state = ROBOT_READY; // 启动时机器人进入工作模式,后续加入所有应用初始化完成之后再进入
 }
 
@@ -84,24 +85,16 @@ void RobotCMDInit()
  */
 static void CalcOffsetAngle()
 {
-    // 别名angle提高可读性,不然太长了不好看,虽然基本不会动这个函数
-    static float angle;
-    angle = gimbal_fetch_data.yaw_motor_single_round_angle; // 从云台获取的当前yaw电机单圈角度
-#if YAW_ECD_GREATER_THAN_4096                               // 如果大于180度
-    if (angle > YAW_ALIGN_ANGLE && angle <= 180.0f + YAW_ALIGN_ANGLE)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-    else if (angle > 180.0f + YAW_ALIGN_ANGLE)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE - 360.0f;
-    else
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-#else // 小于180度
-    if (angle > YAW_ALIGN_ANGLE)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-    else if (angle <= YAW_ALIGN_ANGLE && angle >= YAW_ALIGN_ANGLE - 180.0f)
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
-    else
-        chassis_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE + 360.0f;
-#endif
+    // // 别名angle提高可读性,不然太长了不好看,虽然基本不会动这个函数
+    // static float angle;
+    // angle = gimbal_fetch_data.yaw_motor_single_round_angle; // 从云台获取的当前yaw电机单圈角度
+
+    // if (angle > YAW_ALIGN_ANGLE)
+    //     gimbal_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
+    // else if (angle <= YAW_ALIGN_ANGLE && angle >= YAW_ALIGN_ANGLE - 180.0f)
+    //     gimbal_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE;
+    // else
+    //     gimbal_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE + 360.0f;
 }
 
 /**
@@ -133,14 +126,15 @@ static void RemoteControlSet()
     { // 按照摇杆的输出大小进行角度增量,增益系数需调整
         //gimbal_cmd_send.yaw += 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
         // gimbal_cmd_send.yaw += -0.001f * (float)rc_data[TEMP].rc.rocker_l_;
-        gimbal_cmd_send.yaw = -0.05f * (float)mc_data[TEMP].rocker_l_;
-        gimbal_cmd_send.pitch = -0.015f * (float)mc_data[TEMP].rocker_l1;
+        mc_data[TEMP].rocker_l_=float_deadband((float)mc_data[TEMP].rocker_l_, -20, 20);//遥控器拨杆死区处理
+        mc_data[TEMP].rocker_l1=float_deadband((float)mc_data[TEMP].rocker_l1, -20, 20);//遥控器拨杆死区处理
+        gimbal_cmd_send.yaw += -0.0015f * (float)mc_data[TEMP].rocker_l_;
+        gimbal_cmd_send.pitch += -0.001f * (float)mc_data[TEMP].rocker_l1;
+
     }
     // 云台软件限位
-
-    // 底盘参数,目前没有加入小陀螺(调试似乎暂时没有必要),系数需要调整
-    // chassis_cmd_send.vx = 10.0f * (float)mc_data[TEMP].rc.rocker_r_; // _水平方向
-    // chassis_cmd_send.vy = 10.0f * (float)mc_data[TEMP].rc.rocker_r1; // 1数值方向
+    gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-21.0,21.0);
+    gimbal_cmd_send.yaw = float_constrain(gimbal_cmd_send.yaw,-52.0,52.0);
 
     // 发射参数
     if (switch_is_up(mc_data[TEMP].switch_right)) // 右侧开关状态[上],弹舱打开
@@ -270,13 +264,18 @@ static void EmergencyHandler()
         shoot_cmd_send.shoot_mode = SHOOT_OFF;
         shoot_cmd_send.friction_mode = FRICTION_OFF;
         shoot_cmd_send.load_mode = LOAD_STOP;
+
+        gimbal_cmd_send.gimbal_mode = GIMBAL_ZERO_FORCE;// 云台急停模式
         LOGERROR("[CMD] emergency stop!");
     }
-    // 遥控器右侧开关为[上],恢复正常运行
+    // 遥控器右侧开关为[上],恢复正常运行Y
     if (switch_is_up(mc_data[TEMP].switch_right))
     {
         robot_state = ROBOT_READY;
         shoot_cmd_send.shoot_mode = SHOOT_ON;
+
+        gimbal_cmd_send.yaw = 0;// 恢复时回中
+        gimbal_cmd_send.pitch = 0;//恢复回中
         LOGINFO("[CMD] reinstate, robot ready");
     }
 }
@@ -284,7 +283,7 @@ static void EmergencyHandler()
 /* 机器人核心控制任务,200Hz频率运行(必须高于视觉发送频率) */
 void RobotCMDTask()
 {
-    // 从其他应用获取回传数据
+    // 从其他应用获取回传数据s
 #ifdef ONE_BOARD
     SubGetMessage(chassis_feed_sub, (void *)&chassis_fetch_data);
 #endif // ONE_BOARD

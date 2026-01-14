@@ -31,6 +31,6 @@ void get_protocol_send_data(uint16_t send_id,		 // 信号id
 /*接收数据处理*/
 uint16_t get_protocol_info(uint8_t *rx_buf,			 // 接收到的原始数据
 						   uint16_t *flags_register, // 接收数据的16位寄存器地址
-						   uint8_t *rx_data);			 // 接收的float数据存储地址
+						   uint8_t *rx_data);			 // 接收的float数据存储地址						   
 
 #endif

@@ -4,8 +4,8 @@
 #include "bsp_usart.h"
 #include "seasky_protocol.h"
 
-#define VISION_RECV_SIZE 18u // 当前为固定值,36字节
-#define VISION_SEND_SIZE 36u
+#define VISION_RECV_SIZE 10u // 当前为固定值,36字节
+#define VISION_SEND_SIZE 32u
 
 #pragma pack(1)
 typedef enum
@@ -37,19 +37,32 @@ typedef enum
 
 typedef struct
 {
-	Fire_Mode_e fire_mode;
+	// Fire_Mode_e fire_mode;
 	Target_State_e target_state;
-	Target_Type_e target_type;
+	// Target_Type_e target_type;
 
-	float pitch;
-	float yaw;
+	// float pitch;
+	// float yaw;
+
+	uint8_t header;
+	uint8_t tracking: 1;
+	uint8_t id: 3;          // 0-outpost 6-guard 7-base
+	uint8_t armors_num: 3;  // 2-balance 3-outpost 4-normal
+	uint8_t reserved: 1;
+	int16_t pitch;
+	int16_t yaw;
+	int16_t shoot_mode;
+	int16_t checksum;
 } Vision_Recv_s;
 
 typedef enum
 {
-	COLOR_NONE = 0,
+	// COLOR_NONE = 0,
+	// COLOR_BLUE = 1,
+	// COLOR_RED = 2,
+
+	COLOR_RED = 0,
 	COLOR_BLUE = 1,
-	COLOR_RED = 2,
 } Enemy_Color_e;
 
 typedef enum
@@ -71,13 +84,26 @@ typedef enum
 
 typedef struct
 {
-	Enemy_Color_e enemy_color;
-	Work_Mode_e work_mode;
-	Bullet_Speed_e bullet_speed;
+	// Enemy_Color_e enemy_color;
+	// Work_Mode_e work_mode;.
+	// Bullet_Speed_e bullet_speed;
 
-	float yaw;
-	float pitch;
+	// float yaw;
+	// float pitch;
+	// float roll;
+
+	uint8_t header;
+	uint8_t detect_color: 1;  // 0-red 1-blue
+	uint8_t reset_tracker: 1;
+	uint8_t reserved: 6;
 	float roll;
+	float pitch;
+	float yaw;
+	float speed;
+	float aim_x;
+	float aim_y;
+	float aim_z;
+	uint16_t checksum;
 } Vision_Send_s;
 #pragma pack()
 
