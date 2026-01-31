@@ -178,8 +178,7 @@ void GimbalTask()
     gimbal_feedback_data.gimbal_imu_data = *gimba_IMU_data;
     gimbal_feedback_data.yaw_motor_single_round_angle = yaw_motor->measure.angle_single_round;
 
-    VisionSetYaw(yaw_motor->measure.total_angle); // 将yaw电机的总角度传给视觉模块
-
+    VisionSetMotorAngle(yaw_motor->measure.angle_single_round, pitch_motor->measure.total_angle);
     // 推送消息
     PubPushMessage(gimbal_pub, (void *)&gimbal_feedback_data);
 }

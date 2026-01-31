@@ -37,14 +37,15 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
 
 void VisionSetAltitude(float yaw, float pitch, float roll)
 {
-    // send_data.yaw = yaw;
+    send_data.yaw = yaw;
     send_data.pitch = roll;
     send_data.roll = pitch;//C板安装坐标roll和pitch调换
 }
 
-void VisionSetYaw(float yaw)
+void VisionSetMotorAngle(float yaw, float pitch)
 {
-    send_data.yaw = yaw;
+    send_data.yaw_motor_angle = yaw;
+    send_data.pitch_motor_angle = pitch;
 }
 /**
  * @brief 离线回调函数,将在daemon.c中被daemon task调用

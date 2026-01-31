@@ -91,10 +91,9 @@ typedef struct
 	float roll;
 	float pitch;
 	float yaw;
+	float yaw_motor_angle;
+	float pitch_motor_angle;
 	float speed;
-	float aim_x;
-	float aim_y;
-	float aim_z;
 	uint16_t checksum;
 } Vision_Send_s;
 #pragma pack()
