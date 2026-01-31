@@ -29,15 +29,12 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
     send_data.reset_tracker = 0;
     send_data.reserved = 0;
     send_data.speed = (float)bullet_speed; 
-    send_data.aim_x = 0.0f; 
-    send_data.aim_y = 0.0f;
-    send_data.aim_z = 0.0f;
     send_data.checksum = 0;
 }
 
 void VisionSetAltitude(float yaw, float pitch, float roll)
 {
-    send_data.yaw = yaw;
+    send_data.yaw = -yaw;
     send_data.pitch = roll;
     send_data.roll = pitch;//C板安装坐标roll和pitch调换
 }
@@ -47,13 +44,59 @@ void VisionSetMotorAngle(float yaw, float pitch)
     send_data.yaw_motor_angle = yaw;
     send_data.pitch_motor_angle = pitch;
 }
-/**
- * @brief 离线回调函数,将在daemon.c中被daemon task调用
- * @attention 由于HAL库的设计问题,串口开启DMA接收之后同时发送有概率出现__HAL_LOCK()导致的死锁,使得无法
- *            进入接收中断.通过daemon判断数据更新,重新调用服务启动函数以解决此问题.
- *
- * @param id vision_usart_instance的地址,此处没用.
- */
+/// @brief 计算发送的checksum数值，不包含header,把每个字节相加，取低16位
+static void VisionCalCheckSum()
+{
+    uint8_t buf[VISION_SEND_SIZE];
+    memcpy(buf, &send_data, VISION_SEND_SIZE);
+
+    // checksum 不包含 header 字段
+    buf[0] = 0;
+
+    // 计算时不包含 checksum 字段本身
+    buf[VISION_SEND_SIZE - 2] = 0;
+    buf[VISION_SEND_SIZE - 1] = 0;
+
+    uint16_t sumraw = 0;
+    for (uint32_t i = 0; i < VISION_SEND_SIZE; i++)
+    {
+        sumraw = (uint16_t)(sumraw + buf[i]);
+    }
+    send_data.checksum = ((sumraw & 0x00FF) << 8) | ((sumraw & 0xFF00) >> 8);
+}
+
+/// @brief 处理接收的CheckSum数据
+/// @return checksum是否正确，1正确，0错误
+static uint8_t VisionCheckSum(const uint8_t *frame, uint32_t len)
+{
+    if (frame == NULL || len < 4)
+        return 0;
+
+    uint8_t buf[VISION_RECV_SIZE];
+    if (len > VISION_RECV_SIZE)
+        len = VISION_RECV_SIZE;
+
+    memcpy(buf, frame, len);
+
+    // checksum 不包含 header 字段
+    buf[0] = 0;
+
+    // 计算时不包含 checksum 字段本身
+    buf[len - 2] = 0;
+    buf[len - 1] = 0;
+
+    uint16_t sumraw = 0;
+    for (uint32_t i = 0; i < len; i++)
+    {
+        sumraw = (uint16_t)(sumraw + buf[i]);
+    }
+
+    // 与发送端 VisionCalCheckSum() 保持一致：对低16位做高低字节互换
+    uint16_t sum = (uint16_t)(((sumraw & 0x00FF) << 8) | ((sumraw & 0xFF00) >> 8));
+
+    uint16_t rx_sum = (uint16_t)frame[len - 2] | ((uint16_t)frame[len - 1] << 8);
+    return (sum == rx_sum) ? 1 : 0;
+}
 
 #ifdef VISION_USE_UART
 
@@ -84,7 +127,8 @@ static void DecodeVision()
     DaemonReload(vision_daemon_instance); // 喂狗
     // get_protocol_info(vision_usart_instance->recv_buff, &flag_register, (uint8_t *)&recv_data.pitch);
     // TODO: code to resolve flag_register;
-    if(vision_usart_instance->recv_buff[0]==0xA5)
+    if (vision_usart_instance->recv_buff[0] == 0xA5 &&
+        VisionCheckSum(vision_usart_instance->recv_buff, VISION_RECV_SIZE))
         memcpy(&recv_data, &vision_usart_instance->recv_buff, VISION_RECV_SIZE);
     else
         return;
@@ -136,6 +180,8 @@ void VisionSend()
     // 若使用了daemon,则也可以使用DMA发送.
 
     static uint8_t send_buf[VISION_SEND_SIZE];
+    
+    VisionCalCheckSum();
     memcpy(&send_buf[0], &send_data, VISION_SEND_SIZE);
     USARTSend(vision_usart_instance, send_buf, VISION_SEND_SIZE, USART_TRANSFER_IT);
 }
@@ -157,9 +203,17 @@ static uint8_t *vis_recv_buff;
 
 static void DecodeVision(uint16_t recv_len)
 {
-    uint16_t flag_register;
-    get_protocol_info(vis_recv_buff, &flag_register, (uint8_t *)&recv_data.pitch);
+    // uint16_t flag_register;
+    // get_protocol_info(vis_recv_buff, &flag_register, (uint8_t *)&recv_data.pitch);
     // TODO: code to resolve flag_register;
+    DaemonReload(vision_daemon_instance); // 喂狗
+
+    if (vis_recv_buff[0] == 0xA5 &&
+        VisionCheckSum(vis_recv_buff, VISION_RECV_SIZE))
+        memcpy(&recv_data, vis_recv_buff, VISION_RECV_SIZE);
+    else
+        return;
+
 }
 
 /* 视觉通信初始化 */
@@ -168,6 +222,8 @@ Vision_Recv_s *VisionInit(UART_HandleTypeDef *_handle)
     UNUSED(_handle); // 仅为了消除警告
     USB_Init_Config_s conf = {.rx_cbk = DecodeVision};
     vis_recv_buff = USBInit(conf);
+    
+    VisionSetFlag(COLOR_RED, VISION_MODE_AIM, SMALL_AMU_15); // 默认值
 
     // 为master process注册daemon,用于判断视觉通信是否离线
     Daemon_Init_Config_s daemon_conf = {
@@ -182,14 +238,19 @@ Vision_Recv_s *VisionInit(UART_HandleTypeDef *_handle)
 
 void VisionSend()
 {
-    static uint16_t flag_register;
-    static uint8_t send_buff[VISION_SEND_SIZE];
-    static uint16_t tx_len;
-    // TODO: code to set flag_register
-    flag_register = 30 << 8 | 0b00000001;
-    // 将数据转化为seasky协议的数据包
-    get_protocol_send_data(0x02, flag_register, &send_data.yaw, 3, send_buff, &tx_len);
-    USBTransmit(send_buff, tx_len);
+    // static uint16_t flag_register;
+    // static uint8_t send_buff[VISION_SEND_SIZE];
+    // static uint16_t tx_len;
+    // // TODO: code to set flag_register
+    // flag_register = 30 << 8 | 0b00000001;
+    // // 将数据转化为seasky协议的数据包
+    // get_protocol_send_data(0x02, flag_register, &send_data.yaw, 3, send_buff, &tx_len);
+    // USBTransmit(send_buff, tx_len);
+    static uint8_t send_buf[VISION_SEND_SIZE];
+    
+    VisionCalCheckSum();
+    memcpy(&send_buf[0], &send_data, VISION_SEND_SIZE);
+    USBTransmit(send_buf, VISION_SEND_SIZE);
 }
 
 #endif // VISION_USE_VCP

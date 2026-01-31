@@ -19,6 +19,7 @@ static Gimbal_Upload_Data_s gimbal_feedback_data; // 回传给cmd的云台状态
 static Gimbal_Ctrl_Cmd_s gimbal_cmd_recv;         // 来自cmd的控制信息
 
 static float gravity_re = 0;
+static float yaw_offset = 0;    //上电时yaw电机的偏转角
 
 void GimbalInit()
 {
@@ -48,7 +49,7 @@ void GimbalInit()
                 .IntegralLimit = 3000,
                 .MaxOut = 20000,
             },
-            .other_angle_feedback_ptr = &gimba_IMU_data->YawTotalAngle,
+            .other_angle_feedback_ptr = &gimba_IMU_data->YawRef,//为了保持和Vision同一个坐标系的yaw反馈
             // 还需要增加角速度额外反馈指针,注意方向,ins_task.md中有c板的bodyframe坐标系说明
             .other_speed_feedback_ptr = &gimba_IMU_data->Gyro[2],
         },
@@ -69,18 +70,19 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = -5,    //5       
+                .Kp = -7,    //5       
                 .Ki = -0.2, //0.15
-                .Kd = -0.1, //0.01
+                .Kd = -0.2, //0.01
                 .DeadBand = 0.1,
-                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
+                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement | PID_OutputFilter,
                 // .CoefA = 2.0,
                 // .CoefB = 0.1,
+                .Output_LPF_RC = 0.005,
                 .IntegralLimit = 100,//200
                 .MaxOut = 40,
             },
             .speed_PID = {
-                .Kp = -0.02,     // 0.005
+                .Kp = -0.03,     // 0.005
                 .Ki = -0.00,        // 0.1
                 .Kd = -0.0001,   // 0.0001
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -124,20 +126,28 @@ void GimbalInit()
 /* 机器人云台控制核心任务,后续考虑只保留IMU控制,不再需要电机的反馈 */
 void GimbalTask()
 {
+    static uint8_t power_on_flag = 0;
+    if (!power_on_flag)
+    {
+        power_on_flag = 1;
+        yaw_offset = yaw_motor->measure.total_angle;
+        IMU_SetYawOffset(yaw_offset);
+    }//上电初始化好后记录当前的yaw偏转角，并在ins里面加到反馈源YawRef中
+
     static float last_pitch_ref, current_pitch_ref;
     last_pitch_ref = current_pitch_ref;
     current_pitch_ref = gimbal_cmd_recv.pitch;
     if(current_pitch_ref - last_pitch_ref > 0.001f)
     {
-        gravity_re = 0.15;
+        // gravity_re = -0.15;
     }
     else if((current_pitch_ref - last_pitch_ref) < -0.001f)
     {
-        gravity_re = -0.5;
+        // gravity_re = -0.9;
     }
     else
     {
-        gravity_re = 0;
+        // gravity_re = 0;
     }
 
     // 获取云台控制数据
@@ -177,8 +187,11 @@ void GimbalTask()
     // 设置反馈数据,主要是imu和yaw的ecd
     gimbal_feedback_data.gimbal_imu_data = *gimba_IMU_data;
     gimbal_feedback_data.yaw_motor_single_round_angle = yaw_motor->measure.angle_single_round;
+    
+    //pitch转成水平为0，yaw安装时即向前为零
+    VisionSetMotorAngle(yaw_motor->measure.total_angle, (pitch_motor->measure.total_angle - PITCH_OFFSET));
+    // VisionSetMotorAngle(30.0, 20.0);
 
-    VisionSetMotorAngle(yaw_motor->measure.angle_single_round, pitch_motor->measure.total_angle);
     // 推送消息
     PubPushMessage(gimbal_pub, (void *)&gimbal_feedback_data);
 }

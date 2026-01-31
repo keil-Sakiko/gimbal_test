@@ -5,7 +5,7 @@
 #include "seasky_protocol.h"
 
 #define VISION_RECV_SIZE 14u // 当前为固定值,36字节
-#define VISION_SEND_SIZE 32u
+#define VISION_SEND_SIZE 28u
 
 #pragma pack(1)
 typedef enum
@@ -91,9 +91,9 @@ typedef struct
 	float roll;
 	float pitch;
 	float yaw;
+	float speed;
 	float yaw_motor_angle;
 	float pitch_motor_angle;
-	float speed;
 	uint16_t checksum;
 } Vision_Send_s;
 #pragma pack()
@@ -126,6 +126,7 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
  * @param yaw
  * @param pitch
  */
-void VisionSetAltitude(float yaw, float pitch, float roll);
-void VisionSetYaw(float yaw);
+void VisionSetAltitude(float yaw, float pitch, float roll);//IMU反馈角度
+void VisionSetMotorAngle(float yaw, float pitch);//电机机械角度反馈
+
 #endif // !MASTER_PROCESS_H

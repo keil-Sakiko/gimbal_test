@@ -34,6 +34,7 @@ typedef struct
     float Pitch;
     float Yaw;
     float YawTotalAngle;
+    float YawRef;//最终的yaw电机闭环对象，包含offset,必须同步修改attitude_t和INS_t
 } attitude_t; // 最终解算得到的角度,以及yaw转动的总角度(方便多圈控制)
 
 typedef struct
@@ -62,6 +63,7 @@ typedef struct
     float Pitch;
     float Yaw;
     float YawTotalAngle;
+    float YawRef;//最终的yaw电机闭环对象，包含offset，必须同步修改attitude_t和INS_t
 
     uint8_t init;
 } INS_t;
@@ -139,5 +141,7 @@ void BodyFrameToEarthFrame(const float *vecBF, float *vecEF, float *q);
  * @param q
  */
 void EarthFrameToBodyFrame(const float *vecEF, float *vecBF, float *q);
+
+void IMU_SetYawOffset(float yawoffset);
 
 #endif

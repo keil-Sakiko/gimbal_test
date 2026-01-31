@@ -35,6 +35,8 @@ static float RefTemp = 40; // 恒温设定温度
 
 static void IMU_Param_Correction(IMU_Param_t *param, float gyro[3], float accel[3]);
 
+static float YawMotorOffset;
+
 static void IMUPWMSet(uint16_t pwm)
 {
     __HAL_TIM_SetCompare(&htim10, TIM_CHANNEL_1, pwm);
@@ -115,6 +117,14 @@ attitude_t *INS_Init(void)
     return (attitude_t *)&INS.Gyro; // @todo: 这里偷懒了,不要这样做! 修改INT_t结构体可能会导致异常,待修复.
 }
 
+/// @brief 提供给app层的接口，获取电机初始化好后的offset数据
+///        直接在gimbal_task里200hz更新yaw反馈数据源会导致电机不良震动，必须在ins_task里1khz更新
+/// @param yawoffset 
+void IMU_SetYawOffset(float yawoffset)
+{
+    YawMotorOffset = yawoffset;
+}
+
 /* 注意以1kHz的频率运行此任务 */
 void INS_Task(void)
 {
@@ -166,8 +176,9 @@ void INS_Task(void)
         INS.Pitch = QEKF_INS.Pitch;
         INS.Roll = QEKF_INS.Roll;
         INS.YawTotalAngle = QEKF_INS.YawTotalAngle;
-
-        VisionSetAltitude(INS.Yaw, INS.Pitch, INS.Roll);
+        INS.YawRef = INS.Yaw - YawMotorOffset;//相当于把云台坐标系改成中间向前yaw为0
+        VisionSetAltitude((float)INS.YawRef, (float)INS.Pitch, (float)INS.Roll);//发给视觉的yaw是以中间向前为0的yaw
+        // VisionSetAltitude(-10.0, -20.0, 10.0);//发给视觉的yaw是以中间向前为0的yaw
     }
 
     // temperature control

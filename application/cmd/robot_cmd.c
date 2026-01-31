@@ -161,7 +161,7 @@ static void RemoteControlSet()
     // 云台参数,确定云台控制数据
     // 左侧开关状态为[下],或视觉未识别到目标,纯遥控器拨杆控制
     // if (switch_is_down(mc_data[TEMP].switch_left) || vision_recv_data->target_state == NO_TARGET)
-    if (switch_is_down(mc_data[TEMP].switch_left) && (switch_is_down(mc_data[TEMP].switch_right) || switch_is_mid(mc_data[TEMP].switch_right)) && vision_recv_data->tracking == 0)
+    if (switch_is_down(mc_data[TEMP].switch_left) && (switch_is_down(mc_data[TEMP].switch_right) || switch_is_mid(mc_data[TEMP].switch_right)) || vision_recv_data->tracking == 0)
     {
         mc_data[TEMP].rocker_l_=float_deadband((float)mc_data[TEMP].rocker_l_, -30, 30);//遥控器拨杆死区处理
         mc_data[TEMP].rocker_l1=float_deadband((float)mc_data[TEMP].rocker_l1, -30, 30);//遥控器拨杆死区处理

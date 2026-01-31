@@ -20,6 +20,10 @@
                 "openocd_dap.cfg", // 配置文件已经在根目录提供,若要修改以此类推,openocd的路径下的share/scripts中有各种写好的配置文件
             ],
             "runToEntryPoint": "main", // 调试时在main函数入口停下
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 50
+            },
             "rtos": "FreeRTOS",
             "preLaunchTask": "build task",//先运行Build任务编译项目,取消注释即可使用
             // dap若要使用log,请使用Jlink调试任务启动,之后再打开log任务
@@ -34,6 +38,10 @@
             "type": "cortex-debug",
             "device": "STM32F407IG",
             "runToEntryPoint": "main",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 50
+            },
             "showDevDebugOutput": "none",
             "servertype": "jlink",
             "interface": "swd",
@@ -52,6 +60,10 @@
             "device": "STM32F407IG",
             "svdFile": "STM32F407.svd",
             "servertype": "openocd",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 50
+            },
             "configFiles": [
                 "openocd_dap.cfg",
             ],
@@ -63,6 +75,10 @@
             "request": "attach",
             "type": "cortex-debug",
             "device": "STM32F407IG",
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 50
+            },
             "showDevDebugOutput": "none",
             "servertype": "jlink",
             "interface": "swd",
