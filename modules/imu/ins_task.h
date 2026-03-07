@@ -25,6 +25,13 @@
 
 #define INS_TASK_PERIOD 1
 
+/* 滑动窗口滤波队列长度（用于INS.Gyro[Z]等场景）。
+ * 越大：滤波更平滑但延迟更大；越小：响应更快但噪声更大。
+ */
+#ifndef BUFF_LEN
+#define BUFF_LEN 10
+#endif
+
 typedef struct
 {
     float Gyro[3];  // 角速度

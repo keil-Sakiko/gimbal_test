@@ -20,6 +20,13 @@
 #include "general_def.h"
 #include "master_process.h"
 
+float buffer_gyro_z[BUFF_LEN] = {0};
+float buffer_gyro_x[BUFF_LEN] = {0};
+float buffer_gyro_y[BUFF_LEN] = {0};
+float buffer_accel_x[BUFF_LEN] = {0};
+float buffer_accel_y[BUFF_LEN] = {0};
+float buffer_accel_z[BUFF_LEN] = {0};
+
 static INS_t INS;
 static IMU_Param_t IMU_Param;
 static PIDInstance TempCtrl = {0};
@@ -112,7 +119,7 @@ attitude_t *INS_Init(void)
     PIDInit(&TempCtrl, &config);
 
     // noise of accel is relatively big and of high freq,thus lpf is used
-    INS.AccelLPF = 0.0085;
+    INS.AccelLPF = 0.2;//0.0085
     DWT_GetDeltaT(&INS_DWT_Count);
     return (attitude_t *)&INS.Gyro; // @todo: 这里偷懒了,不要这样做! 修改INT_t结构体可能会导致异常,待修复.
 }
@@ -125,6 +132,11 @@ void IMU_SetYawOffset(float yawoffset)
     YawMotorOffset = yawoffset;
 }
 
+#if (BUFF_LEN < 1)
+#error "BUFF_LEN must be >= 1"
+#endif
+
+static float yaw_gyro_sum = 0.0f;
 /* 注意以1kHz的频率运行此任务 */
 void INS_Task(void)
 {
@@ -139,13 +151,12 @@ void INS_Task(void)
     {
         BMI088_Read(&BMI088);
 
-        INS.Accel[X] = BMI088.Accel[X];
-        INS.Accel[Y] = BMI088.Accel[Y];
-        INS.Accel[Z] = BMI088.Accel[Z];
-        INS.Gyro[X] = BMI088.Gyro[X];
-        INS.Gyro[Y] = BMI088.Gyro[Y];
-        INS.Gyro[Z] = BMI088.Gyro[Z];
-
+        INS.Accel[X] = AverageFilter(BMI088.Accel[X], buffer_accel_x, BUFF_LEN);
+        INS.Accel[Y] = AverageFilter(BMI088.Accel[Y], buffer_accel_y, BUFF_LEN);
+        INS.Accel[Z] = AverageFilter(BMI088.Accel[Z], buffer_accel_z, BUFF_LEN);
+        INS.Gyro[X] = AverageFilter(BMI088.Gyro[X], buffer_gyro_x, BUFF_LEN);
+        INS.Gyro[Y] = AverageFilter(BMI088.Gyro[Y], buffer_gyro_y, BUFF_LEN);
+        INS.Gyro[Z] = AverageFilter(BMI088.Gyro[Z], buffer_gyro_z, BUFF_LEN);
         // demo function,用于修正安装误差,可以不管,本demo暂时没用
         IMU_Param_Correction(&IMU_Param, INS.Gyro, INS.Accel);
 
@@ -173,8 +184,8 @@ void INS_Task(void)
         BodyFrameToEarthFrame(INS.MotionAccel_b, INS.MotionAccel_n, INS.q); // 转换回导航系n
 
         INS.Yaw = QEKF_INS.Yaw;
-        INS.Pitch = QEKF_INS.Pitch;
-        INS.Roll = QEKF_INS.Roll;
+        INS.Pitch = QEKF_INS.Roll;
+        INS.Roll = QEKF_INS.Pitch;//由于C板安装偏差，ROLL和PITCH反了
         INS.YawTotalAngle = QEKF_INS.YawTotalAngle;
         INS.YawRef = INS.Yaw - YawMotorOffset;//相当于把云台坐标系改成中间向前yaw为0
         VisionSetAltitude((float)INS.YawRef, (float)INS.Pitch, (float)INS.Roll);//发给视觉的yaw是以中间向前为0的yaw

@@ -15,6 +15,8 @@
 #include "robot_def.h"
 
 static Vision_Recv_s recv_data;
+
+static Vision_Recv_s recv_data_temp;
 static Vision_Send_s send_data;
 static DaemonInstance *vision_daemon_instance;
 
@@ -34,9 +36,9 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
 
 void VisionSetAltitude(float yaw, float pitch, float roll)
 {
-    send_data.yaw = -yaw;
-    send_data.pitch = roll;
-    send_data.roll = pitch;//C板安装坐标roll和pitch调换
+    send_data.yaw = yaw;
+    send_data.pitch = pitch;
+    send_data.roll = roll;//C板安装坐标roll和pitch已经在INS_Task里面调换
 }
 
 void VisionSetMotorAngle(float yaw, float pitch)
@@ -200,7 +202,7 @@ static void VisionOfflineCallback(void *id)
 
 #include "bsp_usb.h"
 static uint8_t *vis_recv_buff;
-
+static float yaw_ref,pitch_ref;
 static void DecodeVision(uint16_t recv_len)
 {
     // uint16_t flag_register;
@@ -208,9 +210,17 @@ static void DecodeVision(uint16_t recv_len)
     // TODO: code to resolve flag_register;
     DaemonReload(vision_daemon_instance); // 喂狗
 
-    if (vis_recv_buff[0] == 0xA5 &&
-        VisionCheckSum(vis_recv_buff, VISION_RECV_SIZE))
-        memcpy(&recv_data, vis_recv_buff, VISION_RECV_SIZE);
+    if (vis_recv_buff[0] == 0xA5)
+    {
+        
+        memcpy(&recv_data_temp, vis_recv_buff, VISION_RECV_SIZE);
+        if(VisionCheckSum(vis_recv_buff, VISION_RECV_SIZE))
+        {
+            recv_data = recv_data_temp;
+            yaw_ref = recv_data.yaw / 1000.0f;
+            pitch_ref = recv_data.pitch / 1000.0f;
+        }
+    }
     else
         return;
 

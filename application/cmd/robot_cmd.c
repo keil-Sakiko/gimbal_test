@@ -46,7 +46,7 @@ static Shoot_Ctrl_Cmd_s shoot_cmd_send;      // 传递给发射的控制信息
 static Shoot_Upload_Data_s shoot_fetch_data; // 从发射获取的反馈信息
 
 static PIDInstance Vision_yaw_PID={
-    .Kp = 0.5,
+    .Kp = 0.6,
     .Ki = 0.002,
     .Kd = 0.0,
     .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -55,8 +55,8 @@ static PIDInstance Vision_yaw_PID={
 };
 
 static PIDInstance Vision_pitch_PID={
-    .Kp = 0.0,
-    .Ki = 0.0,
+    .Kp = 0.6,
+    .Ki = 0.002,
     .Kd = 0.0,
     .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
     .IntegralLimit = 30,
@@ -126,20 +126,20 @@ static void RemoteYawConstrain()
     //限位在315°到360°之间和0°到45°之间
     if(gimbal_fetch_data.yaw_motor_single_round_angle<45.0f || gimbal_fetch_data.yaw_motor_single_round_angle>315.0f)
     {
-        gimbal_cmd_send.yaw += -0.003f * (float)mc_data[TEMP].rocker_l_;
+        gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
     }
     if(gimbal_fetch_data.yaw_motor_single_round_angle>=280.0f && gimbal_fetch_data.yaw_motor_single_round_angle<=315.0f)
     {
         if(mc_data[TEMP].rocker_l_<0)
             gimbal_cmd_send.yaw += 0.0;//此时还向右打杆则没有反应
-        else gimbal_cmd_send.yaw += -0.003f * (float)mc_data[TEMP].rocker_l_;
+        else gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
     }
         if(gimbal_fetch_data.yaw_motor_single_round_angle>=45.0f && gimbal_fetch_data.yaw_motor_single_round_angle<=80.0f)
     {
         if(mc_data[TEMP].rocker_l_>0)
             gimbal_cmd_send.yaw += 0.0;//此时还向左打杆则没有反应
         else
-            gimbal_cmd_send.yaw += -0.003f * (float)mc_data[TEMP].rocker_l_;
+            gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
     }
 }
 /**
@@ -166,11 +166,12 @@ static void RemoteControlSet()
         mc_data[TEMP].rocker_l_=float_deadband((float)mc_data[TEMP].rocker_l_, -30, 30);//遥控器拨杆死区处理
         mc_data[TEMP].rocker_l1=float_deadband((float)mc_data[TEMP].rocker_l1, -30, 30);//遥控器拨杆死区处理
         gimbal_cmd_send.pitch += -0.0015f * (float)mc_data[TEMP].rocker_l1;
-        RemoteYawConstrain();
+        gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
+        // RemoteYawConstrain();
     }
     // 云台软件限位
     gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-10,20.0);//pitch限位
-    // gimbal_cmd_send.yaw = float_constrain(gimbal_cmd_send.yaw,-52.0,52.0);
+    gimbal_cmd_send.yaw = float_constrain(gimbal_cmd_send.yaw,-52.0,52.0);
     // 摩擦轮控制,拨轮向上打为负,向下为正
     if (mc_data[TEMP].rocker_r1 > 200) // 向上超过100,打开摩擦轮
     {    
@@ -217,13 +218,14 @@ static void VisionControlSet()
 {
     if (switch_is_mid(mc_data[TEMP].switch_left) && vision_recv_data->tracking == 1) // 左侧开关状态为[中],视觉模式
     {
-        vision_yaw_ref = (((float)vision_recv_data->yaw)/1000.0f)*RAD_2_DEGREE;
-        vision_pitch_ref = -(((float)vision_recv_data->pitch)/1000.0f)*RAD_2_DEGREE;
+        vision_yaw_ref = -((vision_recv_data->yaw)/1000.0f);
+        vision_pitch_ref = ((vision_recv_data->pitch)/1000.0f);
 
-        gimbal_cmd_send.yaw = PIDCalculate(&Vision_yaw_PID, gimbal_fetch_data.gimbal_imu_data.Yaw, vision_yaw_ref);
+        // gimbal_cmd_send.yaw = PIDCalculate(&Vision_yaw_PID, gimbal_fetch_data.gimbal_imu_data.Yaw, vision_yaw_ref);
+        gimbal_cmd_send.yaw = vision_yaw_ref;
         // PIDCalculate(&Vision_pitch_PID, gimbal_fetch_data.gimbal_imu_data.Roll, vision_pitch_ref);
-        gimbal_cmd_send.pitch = 0;
-        
+        // gimbal_cmd_send.pitch = PIDCalculate(&Vision_pitch_PID, gimbal_fetch_data.gimbal_imu_data.Pitch, vision_pitch_ref);
+        gimbal_cmd_send.pitch = vision_pitch_ref;
         // 云台软件限位
         // VisionYawConstrain();
         gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-10,20.0);

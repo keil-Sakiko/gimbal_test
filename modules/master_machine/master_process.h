@@ -4,7 +4,7 @@
 #include "bsp_usart.h"
 #include "seasky_protocol.h"
 
-#define VISION_RECV_SIZE 14u // 当前为固定值,36字节
+#define VISION_RECV_SIZE 14u // 当前为固定值
 #define VISION_SEND_SIZE 28u
 
 #pragma pack(1)
@@ -41,8 +41,8 @@ typedef struct
 	uint8_t id: 3;          // 0-outpost 6-guard 7-base
 	uint8_t armors_num: 3;  // 2-balance 3-outpost 4-normal
 	uint8_t reserved: 1;
-	int32_t pitch;
-	int32_t yaw;
+	float pitch;
+	float yaw;
 	int16_t shoot_mode;
 	int16_t checksum;
 }Vision_Recv_s;
