@@ -42,7 +42,7 @@ void GimbalInit()
                 .MaxOut = 500,//500
             },
             .speed_PID = {
-                .Kp = 60,  // 100
+                .Kp = 50,  // 100
                 .Ki = 20.0, // 200
                 .Kd = 0,  // 0
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -84,7 +84,7 @@ void GimbalInit()
             .speed_PID = {
                 .Kp = -0.025,     // 0.005
                 .Ki = -0.001,        // 0.1
-                .Kd = -0.000,   // 0.0001
+                .Kd = -0.0005,   // 0.0001
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
                 .IntegralLimit = 1,//2
                 .MaxOut = 5,
@@ -137,17 +137,19 @@ void GimbalTask()
     static float last_pitch_ref, current_pitch_ref;
     last_pitch_ref = current_pitch_ref;
     current_pitch_ref = gimbal_cmd_recv.pitch;
-    if(current_pitch_ref - last_pitch_ref > 0.001f)
+    if(current_pitch_ref - last_pitch_ref > 0.001f)//下降
     {
-        // gravity_re = -0.15;
+        if(gimba_IMU_data->Pitch <= 0.0)gravity_re = 0.05 * gimba_IMU_data->Pitch - 0.96;
+        if(gimba_IMU_data->Pitch > 0.0)gravity_re = 0.02 * gimba_IMU_data->Pitch - 1.12;
     }
-    else if((current_pitch_ref - last_pitch_ref) < -0.001f)
+    else if((current_pitch_ref - last_pitch_ref) < -0.001f)//上升
     {
-        // gravity_re = -0.5;
+        if(gimba_IMU_data->Pitch <= 0.0)gravity_re = 0.032 * gimba_IMU_data->Pitch - 1.5;
+        if(gimba_IMU_data->Pitch > 0.0)gravity_re = 0.018 * gimba_IMU_data->Pitch - 1.45;
     }
     else
     {
-        gravity_re = 0;
+        // gravity_re = 0.8;
     }
 
     // 获取云台控制数据

@@ -144,6 +144,7 @@ modules/referee/crc_ref.c \
 modules/referee/rm_referee.c \
 modules/referee/referee_UI.c \
 modules/referee/referee_task.c \
+modules/referee/imageRoad.c \
 modules/remote/remote_control.c \
 modules/remote/mc6c.c \
 modules/super_cap/super_cap.c \
