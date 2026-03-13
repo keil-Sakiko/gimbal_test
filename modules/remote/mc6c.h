@@ -79,7 +79,8 @@ typedef struct
     uint16_t switch_right;  // 最右侧开关
 
     uint16_t none[2];  // 保留
-
+     
+    
 } MC_ctrl_t;
 
 /* ------------------------- Internal Data ----------------------------------- */

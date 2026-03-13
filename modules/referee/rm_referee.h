@@ -65,6 +65,8 @@ typedef struct
 	gimbal_mode_e gimbal_mode;				 // 云台模式
 	shoot_mode_e shoot_mode;				 // 发射模式设置
 	friction_mode_e friction_mode;			 // 摩擦轮关闭
+	Bullet_Speed_e bullet_speed;
+	float shoot_rate;
 	lid_mode_e lid_mode;					 // 弹舱盖打开
 	Chassis_Power_Data_s Chassis_Power_Data; // 功率控制
 

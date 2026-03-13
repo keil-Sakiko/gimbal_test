@@ -13,5 +13,6 @@ void RobotCMDInit();
  * 
  */
 void RobotCMDTask();
+void Constrain_float(float *x, float Min, float Max);
 
 #endif // !ROBOT_CMD_H

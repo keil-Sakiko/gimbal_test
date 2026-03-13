@@ -6,6 +6,9 @@
 #include "ins_task.h"
 #include "master_process.h"
 #include "message_center.h"
+#include "referee_protocol.h"
+#include "referee_task.h"
+#include "imageRoad.h"
 #include "general_def.h"
 #include "dji_motor.h"
 #include "mc6c.h"
@@ -28,12 +31,20 @@ static Publisher_t *chassis_cmd_pub;   // 底盘控制消息发布者
 static Subscriber_t *chassis_feed_sub; // 底盘反馈信息订阅者
 #endif                                 // ONE_BOARD
 
+static uint8_t imageRC_Scan(uint8_t mode);
+static uint8_t imageRC_key[5] = {0};
+
 static Chassis_Ctrl_Cmd_s chassis_cmd_send;      // 发送给底盘应用的信息,包括控制信息和UI绘制相关
 static Chassis_Upload_Data_s chassis_fetch_data; // 从底盘应用接收的反馈信息信息,底盘功率枪口热量与底盘运动状态等
 
+static ImageRoad_RC_t *imageRoad_rc;  //图传链路
+static RC_ctrl_t *rc_data;              // 遥控器数据,初始化时返回
 static MC_ctrl_t *mc_data;              // 遥控器数据,初始化时返回
 static Vision_Recv_s *vision_recv_data; // 视觉接收数据指针,初始化时返回
 static Vision_Send_s vision_send_data;  // 视觉发送数据
+
+static referee_info_t* referee_data; // 用于获取裁判系统的数据
+static Referee_Interactive_info_t ui_data; // UI数据
 
 static Publisher_t *gimbal_cmd_pub;            // 云台控制消息发布者
 static Subscriber_t *gimbal_feed_sub;          // 云台反馈信息订阅者
@@ -44,6 +55,8 @@ static Publisher_t *shoot_cmd_pub;           // 发射控制消息发布者
 static Subscriber_t *shoot_feed_sub;         // 发射反馈信息订阅者
 static Shoot_Ctrl_Cmd_s shoot_cmd_send;      // 传递给发射的控制信息
 static Shoot_Upload_Data_s shoot_fetch_data; // 从发射获取的反馈信息
+
+static remote_control_t* imageRoad_data;
 
 static PIDInstance Vision_yaw_PID={
     .Kp = 0.6,
@@ -74,6 +87,9 @@ void RobotCMDInit()
 {
     mc_data = MCControlInit(&huart3);   // 修改为对应串口,注意如果是自研板dbus协议串口需选用添加了反相器的那个
     vision_recv_data = VisionInit(&huart1); // 视觉通信串口
+
+    imageRoad_rc = ImageRoadTaskInit(&huart1);
+   // referee_data = UITaskInit(&huart6,&ui_data); // 裁判系统初始化,会同时初始化UI
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -239,8 +255,8 @@ static void VisionControlSet()
 /*
 static void MouseKeySet()
 {
-    chassis_cmd_send.vx = mc_data[TEMP].key[KEY_PRESS].w * 300 - mc_data[TEMP].key[KEY_PRESS].s * 300; // 系数待测
-    chassis_cmd_send.vy = mc_data[TEMP].key[KEY_PRESS].s * 300 - mc_data[TEMP].key[KEY_PRESS].d * 300;
+ //   chassis_cmd_send.vx = mc_data[TEMP].key[KEY_PRESS].w * 300 - mc_data[TEMP].key[KEY_PRESS].s * 300; // 系数待测
+ //   chassis_cmd_send.vy = mc_data[TEMP].key[KEY_PRESS].s * 300 - mc_data[TEMP].key[KEY_PRESS].d * 300;
 
     gimbal_cmd_send.yaw += (float)mc_data[TEMP].mouse.x / 660 * 10; // 系数待测
     gimbal_cmd_send.pitch += (float)mc_data[TEMP].mouse.y / 660 * 10;
@@ -316,7 +332,223 @@ static void MouseKeySet()
         break;
     }
 }
-*/
+    */
+
+static void Imageroadcontrol()
+{
+    gimbal_cmd_send.pitch += (-0.0015548f) * (float)imageRoad_rc[TEMP].rc.rocker_l1; //0.00005f*DM_ECD_TO_ANGLE
+    gimbal_cmd_send.yaw += (0.0012f) * (float)imageRoad_rc[TEMP].rc.rocker_l_;  //0.005f不要随便改!!
+
+    // if(gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
+    // {
+    //     Constrain_float(&gimbal_cmd_send.pitch,
+    //         gimbal_fetch_data.gimbal_imu_data.Roll - (gimbal_fetch_data.pitch_relative_angle - PITCH_RELATIVE_MIN_ANGLE),
+    //         gimbal_fetch_data.gimbal_imu_data.Roll + (PITCH_RELATIVE_MAX_ANGLE - gimbal_fetch_data.pitch_relative_angle));
+    //     Constrain_float(&gimbal_cmd_send.yaw,
+    //         gimbal_fetch_data.gimbal_imu_data.YawTotalAngle - (gimbal_fetch_data.yaw_relative_angle - YAW_RELATIVE_MIN_ANGLE),
+    //         gimbal_fetch_data.gimbal_imu_data.YawTotalAngle + (YAW_RELATIVE_MAX_ANGLE - gimbal_fetch_data.yaw_relative_angle));
+    // }
+    // else if(gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE)
+    // {
+    //     Constrain_float(&gimbal_cmd_send.pitch,-16.47,16.47);
+    //     Constrain_float(&gimbal_cmd_send.yaw,-32.94,32.94);
+    // }
+    if(imageRoad_rc[TEMP].rc.mode_sw==0)
+    {
+        robot_state = ROBOT_STOP;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_ZERO_FORCE;
+        shoot_cmd_send.shoot_mode = SHOOT_OFF;
+        shoot_cmd_send.friction_mode = FRICTION_OFF;
+        shoot_cmd_send.load_mode = LOAD_STOP;
+        memset(imageRC_key, 0, sizeof(imageRC_key));
+        LOGERROR("[CMD] emergency stop!");   
+    }
+    else if(imageRoad_rc[TEMP].rc.mode_sw==1)
+    {
+        robot_state = ROBOT_READY;
+        // gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;
+        gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        // 摩擦轮控制,拨轮向上打为正,向下为负
+        if (imageRoad_rc[TEMP].rc.wheel > 200) // 向上超过100,打开摩擦轮
+        {
+            shoot_cmd_send.friction_mode = FRICTION_ON;
+            shoot_cmd_send.shoot_mode = SHOOT_ON;
+            ui_data.friction_mode = FRICTION_ON;
+            // 拨弹控制,遥控器固定为一种拨弹模式,可自行选择
+            if (imageRoad_rc[TEMP].rc.wheel > 560)
+            {
+                shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
+                ui_data.shoot_mode = SHOOT_ON;
+            }
+            else
+            {
+                shoot_cmd_send.load_mode = LOAD_STOP;
+                ui_data.shoot_mode = SHOOT_OFF;
+            }
+        }
+        else
+        {
+            shoot_cmd_send.friction_mode = FRICTION_OFF;
+            shoot_cmd_send.shoot_mode = SHOOT_OFF;
+            ui_data.friction_mode = FRICTION_OFF;
+            ui_data.shoot_mode = SHOOT_OFF;
+        }
+            // 弹速控制
+//        shoot_cmd_send.bullet_speed = SMALL_AMU_25;//实际射速：24.7m/s左右
+        // 射频控制
+        shoot_cmd_send.shoot_rate = 25;
+ //       ui_data.bullet_speed = SMALL_AMU_25;
+        ui_data.shoot_mode = 20;
+
+        imageRC_key[0] = imageRC_Scan(0);
+        switch(imageRC_key[0])
+        {
+            case 1:
+                imageRC_key[1] = !imageRC_key[1];
+                break;
+            case 2:
+                imageRC_key[2] = !imageRC_key[2];
+                break;
+            case 3:
+                imageRC_key[3] = !imageRC_key[3];
+                break;
+            case 4:
+                imageRC_key[4] = !imageRC_key[4];
+                break;
+            default:break;
+        }
+        
+        // if(imageRC_key[1] == 1)
+        // {
+        //     gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+        //     ui_data.gimbal_mode = GIMBAL_GYRO_MODE;
+        // }
+        // else if(imageRC_key[1] == 0)
+        // {
+        //     gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;
+        //     ui_data.gimbal_mode = GIMBAL_FREE_MODE;
+        // }
+
+    }
+
+}
+
+static void imageMouseKeyset()
+{
+    gimbal_cmd_send.yaw += (float)imageRoad_rc[TEMP].mouse.x / 660 * 2.5;
+    gimbal_cmd_send.pitch -= (float)imageRoad_rc[TEMP].mouse.y / 660 * 1.8;
+    if(gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
+    {
+        Constrain_float(&gimbal_cmd_send.pitch,
+            gimbal_fetch_data.gimbal_imu_data.Pitch - (gimbal_fetch_data.pitch_relative_angle - PITCH_RELATIVE_MIN_ANGLE),
+            gimbal_fetch_data.gimbal_imu_data.Pitch + (PITCH_RELATIVE_MAX_ANGLE - gimbal_fetch_data.pitch_relative_angle));
+        Constrain_float(&gimbal_cmd_send.yaw,
+            gimbal_fetch_data.gimbal_imu_data.YawTotalAngle - (gimbal_fetch_data.yaw_relative_angle - YAW_RELATIVE_MIN_ANGLE),
+            gimbal_fetch_data.gimbal_imu_data.YawTotalAngle + (YAW_RELATIVE_MAX_ANGLE - gimbal_fetch_data.yaw_relative_angle));
+    }
+    else if(gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE)
+    {
+        Constrain_float(&gimbal_cmd_send.pitch,-16.47,16.47);
+        Constrain_float(&gimbal_cmd_send.yaw,-32.94,32.94);
+    }
+    switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_Z] % 3) // Z键设置弹速
+    {
+        case 0:
+            shoot_cmd_send.bullet_speed = SMALL_AMU_25;
+            ui_data.bullet_speed = 25;
+            break;
+        case 1:
+            shoot_cmd_send.bullet_speed = SMALL_AMU_25;
+            ui_data.bullet_speed = 25;
+            break;
+        default:
+            shoot_cmd_send.bullet_speed = SMALL_AMU_25;
+            ui_data.bullet_speed = 25;
+            break;
+    }
+    switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_E] % 4)  //E键设置射频
+    {
+        case 0:
+            shoot_cmd_send.shoot_rate=20;
+            ui_data.shoot_rate=20;
+            break;
+        case 1:
+            shoot_cmd_send.shoot_rate=15;
+            ui_data.shoot_rate=15;
+            break;
+        default:
+            shoot_cmd_send.shoot_rate=10;
+            ui_data.shoot_rate=10;
+            break;
+    }
+    switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮
+    {
+        case 0:
+            shoot_cmd_send.load_mode=LOAD_BURSTFIRE;
+            shoot_cmd_send.friction_mode = FRICTION_OFF;
+            shoot_cmd_send.shoot_mode = SHOOT_OFF;
+            ui_data.friction_mode = FRICTION_OFF;
+            ui_data.shoot_mode = SHOOT_OFF;
+            break;
+        default:
+            shoot_cmd_send.load_mode=LOAD_STOP;
+            shoot_cmd_send.friction_mode = FRICTION_ON;
+            shoot_cmd_send.shoot_mode = SHOOT_ON;
+            ui_data.friction_mode = FRICTION_ON;
+            ui_data.shoot_mode = SHOOT_ON;
+            break;
+    }
+    
+    // switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R开启自瞄
+    // {
+    // case 0:
+    //     ui_data.vision_mode = VISION_OFF;
+    //     break;
+    // default:
+    //     VisionControl();
+    //     ui_data.vision_mode = VISION_ON;
+    //     break;
+    // }
+    switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_G] % 2) // G
+    {
+        case 0:
+            robot_state = ROBOT_READY;
+            // gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;//默认
+            LOGINFO("[CMD] reinstate, robot ready");
+            break;
+        default:
+            robot_state = ROBOT_STOP;
+            gimbal_cmd_send.gimbal_mode = GIMBAL_ZERO_FORCE;
+            shoot_cmd_send.shoot_mode = SHOOT_OFF;
+            shoot_cmd_send.friction_mode = FRICTION_OFF;
+            shoot_cmd_send.load_mode = LOAD_STOP;
+            LOGERROR("[CMD] emergency stop!");
+            break;
+    }
+    switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_B] % 2) // B键切换云台模式
+    {
+        case 0:
+            gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
+            ui_data.gimbal_mode = GIMBAL_GYRO_MODE;
+            break;
+        default:
+            gimbal_cmd_send.gimbal_mode = GIMBAL_FREE_MODE;
+            ui_data.gimbal_mode = GIMBAL_FREE_MODE;
+            break;
+    }
+    if (imageRoad_rc[TEMP].mouse.press_l) // 左键
+    {
+        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
+        ui_data.shoot_mode = SHOOT_ON;
+    }
+    else 
+    {
+        shoot_cmd_send.load_mode = LOAD_STOP;
+        ui_data.shoot_mode = SHOOT_OFF;
+    }
+
+
+}
 /**
  * @brief  紧急停止,包括遥控器左上侧拨轮打满/重要模块离线/双板通信失效等
  *         开关控制.
@@ -388,5 +620,32 @@ void RobotCMDTask()
     PubPushMessage(shoot_cmd_pub, (void *)&shoot_cmd_send);
     PubPushMessage(gimbal_cmd_pub, (void *)&gimbal_cmd_send);
     VisionSend(&vision_send_data);
+}
+void Constrain_float(float *x, float Min, float Max)
+{
+    if(*x < Min)
+    {
+        *x = Min;
+    }
+    else if(*x > Max)
+    {
+        *x = Max;
+    }
+}
+
+uint8_t imageRC_Scan(uint8_t mode)
+{
+    static uint8_t key_up=1;//按键按松开标志
+    if(mode)key_up=1;  //支持连按
+    if(key_up&&(imageRoad_rc[TEMP].rc.pause == 1||imageRoad_rc[TEMP].rc.trigger == 1||imageRoad_rc[TEMP].rc.fn_l == 1||imageRoad_rc[TEMP].rc.fn_r == 1))
+    {
+        key_up=0;
+        DWT_Delay(0.002);
+        if(imageRoad_rc[TEMP].rc.pause == 1)return 1;
+        else if(imageRoad_rc[TEMP].rc.trigger == 1)return 2;
+        else if(imageRoad_rc[TEMP].rc.fn_l == 1)return 3;
+        else if(imageRoad_rc[TEMP].rc.fn_r == 1)return 4;
+    }else if(imageRoad_rc[TEMP].rc.pause == 0&&imageRoad_rc[TEMP].rc.trigger == 0&&imageRoad_rc[TEMP].rc.fn_l == 0&&imageRoad_rc[TEMP].rc.fn_r == 0)key_up=1;
+    return 0;// 无按键按下
 }
 
