@@ -134,30 +134,6 @@ static void CalcOffsetAngle()
     //     gimbal_cmd_send.offset_angle = angle - YAW_ALIGN_ANGLE + 360.0f;
 }
 
-//yaw方向需要根据机械角度进行限幅，这里只是为了代码简洁做封装
-static void RemoteYawConstrain()
-{
-    //由于不知道yaw初始位置，以下根据yaw电机当前角度做了软件限位。TODO:在CalcOffsetAngle中获取yaw电机偏移角度更直接
-    //yaw正向前是gimbal_fetch_data.yaw_motor_single_round_angle在0和360跳变的位置，所以处理较复杂
-    //限位在315°到360°之间和0°到45°之间
-    if(gimbal_fetch_data.yaw_motor_single_round_angle<45.0f || gimbal_fetch_data.yaw_motor_single_round_angle>315.0f)
-    {
-        gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
-    }
-    if(gimbal_fetch_data.yaw_motor_single_round_angle>=280.0f && gimbal_fetch_data.yaw_motor_single_round_angle<=315.0f)
-    {
-        if(mc_data[TEMP].rocker_l_<0)
-            gimbal_cmd_send.yaw += 0.0;//此时还向右打杆则没有反应
-        else gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
-    }
-        if(gimbal_fetch_data.yaw_motor_single_round_angle>=45.0f && gimbal_fetch_data.yaw_motor_single_round_angle<=80.0f)
-    {
-        if(mc_data[TEMP].rocker_l_>0)
-            gimbal_cmd_send.yaw += 0.0;//此时还向左打杆则没有反应
-        else
-            gimbal_cmd_send.yaw += 0.003f * (float)mc_data[TEMP].rocker_l_;
-    }
-}
 /**
  * @brief 控制输入为遥控器(调试时)的模式和控制量设置
  *
@@ -206,28 +182,6 @@ static void RemoteControlSet()
         shoot_cmd_send.load_mode = LOAD_STOP;
     // 射频控制,固定每秒1发,后续可以根据左侧拨轮的值大小切换射频,
     shoot_cmd_send.shoot_rate = 15;
-}
-
-//yaw方向需要根据机械角度进行限幅，这里只是为了代码简洁做封装
-static void VisionYawConstrain()
-{
-    if(gimbal_fetch_data.yaw_motor_single_round_angle<45.0f || gimbal_fetch_data.yaw_motor_single_round_angle>315.0f)
-    {
-        gimbal_cmd_send.yaw = Vision_yaw_PID.Output;
-    }
-    if(gimbal_fetch_data.yaw_motor_single_round_angle>=280.0f && gimbal_fetch_data.yaw_motor_single_round_angle<=315.0f)
-    {
-        if(Vision_yaw_PID.Output > 0)
-            gimbal_cmd_send.yaw += 0.0;//此时视觉控制输出大于零则没有反应
-        else gimbal_cmd_send.yaw = Vision_yaw_PID.Output;
-    }
-    if(gimbal_fetch_data.yaw_motor_single_round_angle>=45.0f && gimbal_fetch_data.yaw_motor_single_round_angle<=80.0f)
-    {
-        if(Vision_yaw_PID.Output < 0)
-            gimbal_cmd_send.yaw += 0.0;//此时视觉控制输出小于零则没有反应
-        else
-            gimbal_cmd_send.yaw = Vision_yaw_PID.Output;
-    }
 }
 
 static void VisionControlSet()
@@ -339,20 +293,10 @@ static void Imageroadcontrol()
     gimbal_cmd_send.pitch += (-0.0015548f) * (float)imageRoad_rc[TEMP].rc.rocker_l1; //0.00005f*DM_ECD_TO_ANGLE
     gimbal_cmd_send.yaw += (0.0012f) * (float)imageRoad_rc[TEMP].rc.rocker_l_;  //0.005f不要随便改!!
 
-    // if(gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
-    // {
-    //     Constrain_float(&gimbal_cmd_send.pitch,
-    //         gimbal_fetch_data.gimbal_imu_data.Roll - (gimbal_fetch_data.pitch_relative_angle - PITCH_RELATIVE_MIN_ANGLE),
-    //         gimbal_fetch_data.gimbal_imu_data.Roll + (PITCH_RELATIVE_MAX_ANGLE - gimbal_fetch_data.pitch_relative_angle));
-    //     Constrain_float(&gimbal_cmd_send.yaw,
-    //         gimbal_fetch_data.gimbal_imu_data.YawTotalAngle - (gimbal_fetch_data.yaw_relative_angle - YAW_RELATIVE_MIN_ANGLE),
-    //         gimbal_fetch_data.gimbal_imu_data.YawTotalAngle + (YAW_RELATIVE_MAX_ANGLE - gimbal_fetch_data.yaw_relative_angle));
-    // }
-    // else if(gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE)
-    // {
-    //     Constrain_float(&gimbal_cmd_send.pitch,-16.47,16.47);
-    //     Constrain_float(&gimbal_cmd_send.yaw,-32.94,32.94);
-    // }
+    // 云台软件限位
+    gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-10,20.0);//pitch限位
+    gimbal_cmd_send.yaw = float_constrain(gimbal_cmd_send.yaw,-52.0,52.0);
+
     if(imageRoad_rc[TEMP].rc.mode_sw==0)
     {
         robot_state = ROBOT_STOP;
@@ -436,21 +380,12 @@ static void Imageroadcontrol()
 static void imageMouseKeyset()
 {
     gimbal_cmd_send.yaw += (float)imageRoad_rc[TEMP].mouse.x / 660 * 2.5;
-    gimbal_cmd_send.pitch -= (float)imageRoad_rc[TEMP].mouse.y / 660 * 1.8;
-    if(gimbal_cmd_send.gimbal_mode == GIMBAL_GYRO_MODE)
-    {
-        Constrain_float(&gimbal_cmd_send.pitch,
-            gimbal_fetch_data.gimbal_imu_data.Pitch - (gimbal_fetch_data.pitch_relative_angle - PITCH_RELATIVE_MIN_ANGLE),
-            gimbal_fetch_data.gimbal_imu_data.Pitch + (PITCH_RELATIVE_MAX_ANGLE - gimbal_fetch_data.pitch_relative_angle));
-        Constrain_float(&gimbal_cmd_send.yaw,
-            gimbal_fetch_data.gimbal_imu_data.YawTotalAngle - (gimbal_fetch_data.yaw_relative_angle - YAW_RELATIVE_MIN_ANGLE),
-            gimbal_fetch_data.gimbal_imu_data.YawTotalAngle + (YAW_RELATIVE_MAX_ANGLE - gimbal_fetch_data.yaw_relative_angle));
-    }
-    else if(gimbal_cmd_send.gimbal_mode == GIMBAL_FREE_MODE)
-    {
-        Constrain_float(&gimbal_cmd_send.pitch,-16.47,16.47);
-        Constrain_float(&gimbal_cmd_send.yaw,-32.94,32.94);
-    }
+    gimbal_cmd_send.pitch -= (float)imageRoad_rc[TEMP].mouse.y / 660 * 1.5;
+
+    // 云台软件限位
+    gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-10,20.0);//pitch限位
+    gimbal_cmd_send.yaw = float_constrain(gimbal_cmd_send.yaw,-52.0,52.0);
+
     switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_Z] % 3) // Z键设置弹速
     {
         case 0:
@@ -594,15 +529,23 @@ void RobotCMDTask()
     // 根据gimbal的反馈值计算云台和底盘正方向的夹角,不需要传参,通过static私有变量完成
     CalcOffsetAngle();
     // 根据遥控器左侧开关,确定当前使用的控制模式为遥控器调试还是键鼠
-    if (switch_is_down(mc_data[TEMP].switch_left) || switch_is_mid(mc_data[TEMP].switch_left)) // 遥控器左侧开关状态为[下],遥控器控制
+    // if (switch_is_down(mc_data[TEMP].switch_left) || switch_is_mid(mc_data[TEMP].switch_left)) // 遥控器左侧开关状态为[下],遥控器控制
+    // {
+    //     RemoteControlSet();
+    //     VisionControlSet();
+    // }
+    // else if (switch_is_up(mc_data[TEMP].switch_left)) // 遥控器左侧开关状态为[上],键盘控制
+    // {
+
+    // }
+    if(imageRoad_rc[TEMP].rc.mode_sw==0 || imageRoad_rc[TEMP].rc.mode_sw==1)
     {
-        RemoteControlSet();
-        VisionControlSet();
+        Imageroadcontrol();
     }
-    else if (switch_is_up(mc_data[TEMP].switch_left)) // 遥控器左侧开关状态为[上],键盘控制
-        // MouseKeySet();
-        ;
-        
+    else if(imageRoad_rc[TEMP].rc.mode_sw==2)
+    {
+        imageMouseKeyset();
+    }
 
     EmergencyHandler(); // 处理模块离线和遥控器急停等紧急情况
     vision_tracing = vision_recv_data->tracking;
@@ -620,17 +563,6 @@ void RobotCMDTask()
     PubPushMessage(shoot_cmd_pub, (void *)&shoot_cmd_send);
     PubPushMessage(gimbal_cmd_pub, (void *)&gimbal_cmd_send);
     VisionSend(&vision_send_data);
-}
-void Constrain_float(float *x, float Min, float Max)
-{
-    if(*x < Min)
-    {
-        *x = Min;
-    }
-    else if(*x > Max)
-    {
-        *x = Max;
-    }
 }
 
 uint8_t imageRC_Scan(uint8_t mode)
