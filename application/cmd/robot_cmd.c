@@ -393,12 +393,12 @@ static void imageMouseKeyset()
             ui_data.bullet_speed = 25;
             break;
         case 1:
-            shoot_cmd_send.bullet_speed = SMALL_AMU_25;
-            ui_data.bullet_speed = 25;
+            shoot_cmd_send.bullet_speed = SMALL_AMU_15;
+            ui_data.bullet_speed = 15;
             break;
         default:
-            shoot_cmd_send.bullet_speed = SMALL_AMU_25;
-            ui_data.bullet_speed = 25;
+            shoot_cmd_send.bullet_speed = SMALL_AMU_30;  
+            ui_data.bullet_speed = 27;
             break;
     }
     switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_E] % 4)  //E键设置射频
@@ -481,8 +481,6 @@ static void imageMouseKeyset()
         shoot_cmd_send.load_mode = LOAD_STOP;
         ui_data.shoot_mode = SHOOT_OFF;
     }
-
-
 }
 /**
  * @brief  紧急停止,包括遥控器左上侧拨轮打满/重要模块离线/双板通信失效等
