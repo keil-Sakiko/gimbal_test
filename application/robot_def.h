@@ -121,6 +121,12 @@ typedef enum
 
 typedef enum
 {
+    VISION_OFF = 0,//开启视觉
+    VISION_ON,     //关闭视觉
+} vision_mode_e;
+
+typedef enum
+{
     LID_OPEN = 0, // 弹舱盖打开
     LID_CLOSE,    // 弹舱盖关闭
 } lid_mode_e;

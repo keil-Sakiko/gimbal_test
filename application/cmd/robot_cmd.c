@@ -184,6 +184,10 @@ static void RemoteControlSet()
     shoot_cmd_send.shoot_rate = 15;
 }
 
+/**
+ * @brief 控制输入为遥控器(调试时)的视觉模式控制量设置
+ *
+ */
 static void VisionControlSet()
 {
     if (switch_is_mid(mc_data[TEMP].switch_left) && vision_recv_data->tracking == 1) // 左侧开关状态为[中],视觉模式
@@ -203,92 +207,10 @@ static void VisionControlSet()
 }
 
 /**
- * @brief 输入为键鼠时模式和控制量设置
+ * @brief 控制输入为图传遥控器的模式和控制量设置
  *
  */
-/*
-static void MouseKeySet()
-{
- //   chassis_cmd_send.vx = mc_data[TEMP].key[KEY_PRESS].w * 300 - mc_data[TEMP].key[KEY_PRESS].s * 300; // 系数待测
- //   chassis_cmd_send.vy = mc_data[TEMP].key[KEY_PRESS].s * 300 - mc_data[TEMP].key[KEY_PRESS].d * 300;
-
-    gimbal_cmd_send.yaw += (float)mc_data[TEMP].mouse.x / 660 * 10; // 系数待测
-    gimbal_cmd_send.pitch += (float)mc_data[TEMP].mouse.y / 660 * 10;
-
-    switch (mc_data[TEMP].key_count[KEY_PRESS][Key_Z] % 3) // Z键设置弹速
-    {
-    case 0:
-        shoot_cmd_send.bullet_speed = 15;
-        break;
-    case 1:
-        shoot_cmd_send.bullet_speed = 18;
-        break;
-    default:
-        shoot_cmd_send.bullet_speed = 30;
-        break;
-    }
-    switch (mc_data[TEMP].key_count[KEY_PRESS][Key_E] % 4) // E键设置发射模式
-    {
-    case 0:
-        shoot_cmd_send.load_mode = LOAD_STOP;
-        break;
-    case 1:
-        shoot_cmd_send.load_mode = LOAD_1_BULLET;
-        break;
-    case 2:
-        shoot_cmd_send.load_mode = LOAD_3_BULLET;
-        break;
-    default:
-        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-        break;
-    }
-    switch (mc_data[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R键开关弹舱
-    {
-    case 0:
-        shoot_cmd_send.lid_mode = LID_OPEN;
-        break;
-    default:
-        shoot_cmd_send.lid_mode = LID_CLOSE;
-        break;
-    }
-    switch (mc_data[TEMP].key_count[KEY_PRESS][Key_F] % 2) // F键开关摩擦轮
-    {
-    case 0:
-        shoot_cmd_send.friction_mode = FRICTION_OFF;
-        break;
-    default:
-        shoot_cmd_send.friction_mode = FRICTION_ON;
-        break;
-    }
-    switch (mc_data[TEMP].key_count[KEY_PRESS][Key_C] % 4) // C键设置底盘速度
-    {
-    case 0:
-        chassis_cmd_send.chassis_speed_buff = 40;
-        break;
-    case 1:
-        chassis_cmd_send.chassis_speed_buff = 60;
-        break;
-    case 2:
-        chassis_cmd_send.chassis_speed_buff = 80;
-        break;
-    default:
-        chassis_cmd_send.chassis_speed_buff = 100;
-        break;
-    }
-    switch (mc_data[TEMP].key[KEY_PRESS].shift) // 待添加 按shift允许超功率 消耗缓冲能量
-    {
-    case 1:
-
-        break;
-
-    default:
-
-        break;
-    }
-}
-    */
-
-static void Imageroadcontrol()
+static void ImageRoadControlSet()
 {
     gimbal_cmd_send.pitch += (-0.0015548f) * (float)imageRoad_rc[TEMP].rc.rocker_l1; //0.00005f*DM_ECD_TO_ANGLE
     gimbal_cmd_send.yaw += (0.0012f) * (float)imageRoad_rc[TEMP].rc.rocker_l_;  //0.005f不要随便改!!
@@ -338,10 +260,10 @@ static void Imageroadcontrol()
             ui_data.shoot_mode = SHOOT_OFF;
         }
             // 弹速控制
-//        shoot_cmd_send.bullet_speed = SMALL_AMU_25;//实际射速：24.7m/s左右
+       shoot_cmd_send.bullet_speed = SMALL_AMU_25;
         // 射频控制
         shoot_cmd_send.shoot_rate = 25;
- //       ui_data.bullet_speed = SMALL_AMU_25;
+        ui_data.bullet_speed = SMALL_AMU_25;
         ui_data.shoot_mode = 20;
 
         imageRC_key[0] = imageRC_Scan(0);
@@ -377,7 +299,11 @@ static void Imageroadcontrol()
 
 }
 
-static void imageMouseKeyset()
+/**
+ * @brief 控制输入为图传键鼠的模式和控制量设置
+ *
+ */
+static void ImageRoadMouseKeyset()
 {
     gimbal_cmd_send.yaw += (float)imageRoad_rc[TEMP].mouse.x / 660 * 2.5;
     gimbal_cmd_send.pitch -= (float)imageRoad_rc[TEMP].mouse.y / 660 * 1.5;
@@ -433,17 +359,15 @@ static void imageMouseKeyset()
             ui_data.shoot_mode = SHOOT_ON;
             break;
     }
-    
-    // switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R开启自瞄
-    // {
-    // case 0:
-    //     ui_data.vision_mode = VISION_OFF;
-    //     break;
-    // default:
-    //     VisionControl();
-    //     ui_data.vision_mode = VISION_ON;
-    //     break;
-    // }
+    switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_R] % 2) // R开启自瞄
+    {
+    case 0:
+        ui_data.vision_mode = VISION_OFF;
+        break;
+    default:
+        ui_data.vision_mode = VISION_ON;
+        break;
+    }
     switch (imageRoad_rc[TEMP].key_count[KEY_PRESS][Key_G] % 2) // G
     {
         case 0:
@@ -482,6 +406,29 @@ static void imageMouseKeyset()
         ui_data.shoot_mode = SHOOT_OFF;
     }
 }
+static void ImageVisionControlSet()
+{
+    if (ui_data.vision_mode == VISION_ON)
+    {
+        // 开启视觉
+        vision_yaw_ref = -((vision_recv_data->yaw)/1000.0f);
+        vision_pitch_ref = ((vision_recv_data->pitch)/1000.0f);
+
+        // gimbal_cmd_send.yaw = PIDCalculate(&Vision_yaw_PID, gimbal_fetch_data.gimbal_imu_data.Yaw, vision_yaw_ref);
+        gimbal_cmd_send.yaw = vision_yaw_ref;
+        // PIDCalculate(&Vision_pitch_PID, gimbal_fetch_data.gimbal_imu_data.Roll, vision_pitch_ref);
+        // gimbal_cmd_send.pitch = PIDCalculate(&Vision_pitch_PID, gimbal_fetch_data.gimbal_imu_data.Pitch, vision_pitch_ref);
+        gimbal_cmd_send.pitch = vision_pitch_ref;
+        // 云台软件限位
+        // VisionYawConstrain();
+        gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-10,20.0);
+    }
+    else
+    {
+    // 关闭视觉
+    }
+}
+
 /**
  * @brief  紧急停止,包括遥控器左上侧拨轮打满/重要模块离线/双板通信失效等
  *         开关控制.
@@ -538,11 +485,11 @@ void RobotCMDTask()
     // }
     if(imageRoad_rc[TEMP].rc.mode_sw==0 || imageRoad_rc[TEMP].rc.mode_sw==1)
     {
-        Imageroadcontrol();
+        ImageRoadControlSet();
     }
     else if(imageRoad_rc[TEMP].rc.mode_sw==2)
     {
-        imageMouseKeyset();
+        ImageRoadMouseKeyset();
     }
 
     EmergencyHandler(); // 处理模块离线和遥控器急停等紧急情况
