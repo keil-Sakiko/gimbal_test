@@ -85,11 +85,11 @@ static uint8_t vision_tracing;
 
 void RobotCMDInit()
 {
-    mc_data = MCControlInit(&huart3);   // 修改为对应串口,注意如果是自研板dbus协议串口需选用添加了反相器的那个
+  // mc_data = MCControlInit(&huart3);   // 修改为对应串口,注意如果是自研板dbus协议串口需选用添加了反相器的那个
     vision_recv_data = VisionInit(&huart1); // 视觉通信串口
 
     imageRoad_rc = ImageRoadTaskInit(&huart1);
-   // referee_data = UITaskInit(&huart6,&ui_data); // 裁判系统初始化,会同时初始化UI
+    referee_data = UITaskInit(&huart6,&ui_data); // 裁判系统初始化,会同时初始化UI，不用时注释，注意串口最大注册实例
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -185,12 +185,12 @@ static void RemoteControlSet()
 }
 
 /**
- * @brief 控制输入为遥控器(调试时)的视觉模式控制量设置
+ * @brief 控制输入的视觉模式控制量设置,可以是遥控器选择或者图传键鼠选择,根据实际情况选择
  *
  */
 static void VisionControlSet()
 {
-    if (switch_is_mid(mc_data[TEMP].switch_left) && vision_recv_data->tracking == 1) // 左侧开关状态为[中],视觉模式
+    if (switch_is_mid((mc_data[TEMP].switch_left|| ui_data.vision_mode == VISION_ON)&& vision_recv_data->tracking == 1)) // 左侧开关状态为[中],视觉模式
     {
         vision_yaw_ref = -((vision_recv_data->yaw)/1000.0f);
         vision_pitch_ref = ((vision_recv_data->pitch)/1000.0f);
@@ -404,28 +404,6 @@ static void ImageRoadMouseKeyset()
     {
         shoot_cmd_send.load_mode = LOAD_STOP;
         ui_data.shoot_mode = SHOOT_OFF;
-    }
-}
-static void ImageVisionControlSet()
-{
-    if (ui_data.vision_mode == VISION_ON)
-    {
-        // 开启视觉
-        vision_yaw_ref = -((vision_recv_data->yaw)/1000.0f);
-        vision_pitch_ref = ((vision_recv_data->pitch)/1000.0f);
-
-        // gimbal_cmd_send.yaw = PIDCalculate(&Vision_yaw_PID, gimbal_fetch_data.gimbal_imu_data.Yaw, vision_yaw_ref);
-        gimbal_cmd_send.yaw = vision_yaw_ref;
-        // PIDCalculate(&Vision_pitch_PID, gimbal_fetch_data.gimbal_imu_data.Roll, vision_pitch_ref);
-        // gimbal_cmd_send.pitch = PIDCalculate(&Vision_pitch_PID, gimbal_fetch_data.gimbal_imu_data.Pitch, vision_pitch_ref);
-        gimbal_cmd_send.pitch = vision_pitch_ref;
-        // 云台软件限位
-        // VisionYawConstrain();
-        gimbal_cmd_send.pitch = float_constrain(gimbal_cmd_send.pitch,-10,20.0);
-    }
-    else
-    {
-    // 关闭视觉
     }
 }
 
